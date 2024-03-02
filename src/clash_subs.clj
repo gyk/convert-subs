@@ -58,13 +58,22 @@
                          false)
      :udp              true}))
 
-(defn- uri-list->yaml
+(defn- valid-proxy-set
+  [proxy-names]
+  (set (concat ["DIRECT" "REJECT"] proxy-names)))
+
+(defn- uri-list->proxies
   [uri-list allow-insecure?]
   (let [proxies (map (fn [uri]
                        (-> uri
                            (parse-uri)
                            (parsed-uri->clash allow-insecure?)))
-                  uri-list)
+                  uri-list)]
+    proxies))
+
+(defn- uri-list->yaml
+  [uri-list allow-insecure?]
+  (let [proxies (uri-list->proxies uri-list allow-insecure?)
         proxies {:proxies proxies}]
     (yaml/generate-string
       proxies
@@ -72,13 +81,43 @@
       {:indent           4
        :indicator-indent 2})))
 
+(defn- uri-list+template->yaml
+  [uri-list template allow-insecure?]
+  (let [leaf-proxies       (uri-list->proxies uri-list allow-insecure?)
+        leaf-proxy-names   (map :name leaf-proxies)
+        branch-proxy-names (map :name (:proxy-groups template))
+        valid-branch-names (valid-proxy-set branch-proxy-names)
+        valid-names        (valid-proxy-set (concat leaf-proxy-names branch-proxy-names))
+        update-group       (fn [group]
+                             (update group
+                                     :proxies
+                                     (fn [proxy-names]
+                                       (if (not-any? valid-branch-names proxy-names)
+                                         leaf-proxy-names
+                                         (keep valid-names proxy-names)))))
+        template           (-> template
+                               (assoc :proxies leaf-proxies)
+                               (update :proxy-groups #(map update-group %)))]
+
+    (yaml/generate-string
+      template
+      :dumper-options
+      {:indent           4
+       :indicator-indent 2
+       :flow-style       :block})))
+
 (defn convert-subs
-  ([subscribe-url]
-   (convert-subs subscribe-url false))
-  ([subscribe-url allow-insecure?]
-   (-> subscribe-url
-       (fetch-uri-list)
-       (uri-list->yaml allow-insecure?))))
+  [{:keys [url allow-insecure? template]
+    :or   {allow-insecure? false}}]
+  (let [uri-list (fetch-uri-list url)
+        template (some-> template
+                         slurp
+                         yaml/parse-string)]
+    (if template
+      (uri-list+template->yaml uri-list
+                               template
+                               allow-insecure?)
+      (uri-list->yaml uri-list allow-insecure?))))
 
 (comment
   (def trojan
