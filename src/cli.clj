@@ -1,11 +1,15 @@
 (ns cli
   (:require [babashka.cli :as cli]
-            [clash-subs]))
+            [convert-subs.core :refer [convert]]))
 
 (def opt-spec
   {:url            {:ref   "<subs-url>"
                     :desc  "The subscription URL"
                     :alias :u}
+   :kind           {:ref     "<kind>"
+                    :desc    "The kind of subscription (e.g., 'clash', 'sing-box')"
+                    :alias   :k
+                    :default "sing-box"}
    :template       {:ref   "<template-yaml>"
                     :desc  "The template YAML file"
                     :alias :t}
@@ -22,6 +26,7 @@
         _ (when (:help opts)
             (println (cli/format-opts {:spec opt-spec}))
             (System/exit 0))]
-    (println (clash-subs/convert-subs {:url             (:url opts)
-                                       :allow-insecure? (:allow-insecure opts)
-                                       :template        (:template opts)}))))
+    (println (convert {:url             (:url opts)
+                       :kind            (:kind opts)
+                       :allow-insecure? (:allow-insecure opts)
+                       :template        (:template opts)}))))
